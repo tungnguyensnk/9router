@@ -17,6 +17,7 @@ const isUsageEligible = (conn) =>
 const REFRESH_INTERVAL_MS = 60000; // 60 seconds
 const DEPLETED_QUOTA_THRESHOLD = 5; // percent
 const AUTO_REFRESH_STORAGE_KEY = "quotaAutoRefresh";
+const SHOW_DISABLED_STORAGE_KEY = "quotaShowDisabled";
 
 export default function ProviderLimits() {
   const [connections, setConnections] = useState([]);
@@ -41,6 +42,11 @@ export default function ProviderLimits() {
   const [expiringFirst, setExpiringFirst] = useState(false);
   const [providerMenuOpen, setProviderMenuOpen] = useState(false);
   const [bulkToggling, setBulkToggling] = useState(false);
+  const [showDisabled, setShowDisabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = window.localStorage.getItem(SHOW_DISABLED_STORAGE_KEY);
+    return stored === null ? true : stored === "true";
+  });
 
   const intervalRef = useRef(null);
   const countdownRef = useRef(null);
@@ -353,7 +359,11 @@ export default function ProviderLimits() {
   // Filter eligible connections (OAuth + whitelisted apikey)
   const filteredConnections = connections.filter(isUsageEligible);
 
-  const providerFilteredConnections = filteredConnections.filter(
+  const visibilityFilteredConnections = filteredConnections.filter(
+    (conn) => showDisabled || (conn.isActive ?? true),
+  );
+
+  const providerFilteredConnections = visibilityFilteredConnections.filter(
     (conn) => providerFilter === "all" || conn.provider === providerFilter,
   );
 
@@ -427,7 +437,7 @@ export default function ProviderLimits() {
     bulkSetActive(ids, true);
   };
 
-  const providerOptions = Array.from(new Set(filteredConnections.map((conn) => conn.provider))).sort();
+  const providerOptions = Array.from(new Set(visibilityFilteredConnections.map((conn) => conn.provider))).sort();
   const selectedProviderLabel = providerFilter === "all" ? "All providers" : providerFilter;
 
   // Calculate summary stats
@@ -556,6 +566,22 @@ export default function ProviderLimits() {
           >
             <span className="material-symbols-outlined text-[14px]">hourglass_top</span>
             <span className="hidden sm:inline">Expiring first</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setShowDisabled((prev) => {
+                const next = !prev;
+                window.localStorage.setItem(SHOW_DISABLED_STORAGE_KEY, String(next));
+                return next;
+              });
+            }}
+            className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2 text-xs transition-colors ${showDisabled ? "border-black/10 text-text-primary hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5" : "border-primary/40 bg-primary/10 text-primary"}`}
+            title={showDisabled ? "Hide disabled accounts" : "Show disabled accounts"}
+          >
+            <span className="material-symbols-outlined text-[14px]">{showDisabled ? "visibility" : "visibility_off"}</span>
+            <span className="hidden sm:inline">{showDisabled ? "Hide disabled" : "Show disabled"}</span>
           </button>
 
           {/* Bulk: disable depleted */}
