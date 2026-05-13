@@ -321,6 +321,16 @@ function loadDaysInRange(adapter, maxDays) {
   return adapter.all(`SELECT dateKey, data FROM usageDaily WHERE dateKey >= ?`, [cutoffKey]);
 }
 
+function getPeriodHistoryCutoff(period) {
+  if (period === "24h") return new Date(Date.now() - PERIOD_MS["24h"]).toISOString();
+  const periodDays = { "7d": 7, "30d": 30, "60d": 60 };
+  const maxDays = periodDays[period];
+  if (!maxDays) return null;
+  const today = new Date();
+  const cutoff = new Date(today.getFullYear(), today.getMonth(), today.getDate() - maxDays + 1);
+  return cutoff.toISOString();
+}
+
 export async function getUsageStats(period = "all") {
   const db = await getAdapter();
 
@@ -382,6 +392,17 @@ export async function getUsageStats(period = "all") {
     errorProvider: (Date.now() - lastErrorProvider.ts < 10000) ? lastErrorProvider.provider : "",
   };
 
+  const cacheCutoff = getPeriodHistoryCutoff(period);
+  const cacheRows = cacheCutoff
+    ? db.all(`SELECT tokens FROM usageHistory WHERE timestamp >= ?`, [cacheCutoff])
+    : db.all(`SELECT tokens FROM usageHistory`);
+
+  for (const row of cacheRows) {
+    const tokens = parseJson(row.tokens, {}) || {};
+    stats.totalCachedTokens += tokens.cached_tokens || tokens.cache_read_input_tokens || 0;
+    stats.totalCacheCreationTokens += tokens.cache_creation_input_tokens || 0;
+  }
+
   // Active requests
   for (const [connectionId, models] of Object.entries(pendingRequests.byAccount)) {
     for (const [modelKey, count] of Object.entries(models)) {
@@ -435,8 +456,6 @@ export async function getUsageStats(period = "all") {
       stats.totalPromptTokens += day.promptTokens || 0;
       stats.totalCompletionTokens += day.completionTokens || 0;
       stats.totalCost += day.cost || 0;
-      stats.totalCachedTokens += day.cachedTokens || 0;
-      stats.totalCacheCreationTokens += day.cacheCreationTokens || 0;
 
       for (const [prov, p] of Object.entries(day.byProvider || {})) {
         if (!stats.byProvider[prov]) stats.byProvider[prov] = { requests: 0, promptTokens: 0, completionTokens: 0, cost: 0 };
@@ -557,8 +576,6 @@ export async function getUsageStats(period = "all") {
       stats.totalPromptTokens += promptTokens;
       stats.totalCompletionTokens += completionTokens;
       stats.totalCost += entryCost;
-      stats.totalCachedTokens += cachedTokens;
-      stats.totalCacheCreationTokens += cacheCreationTokens;
 
       if (!stats.byProvider[r.provider]) stats.byProvider[r.provider] = { requests: 0, promptTokens: 0, completionTokens: 0, cost: 0 };
       stats.byProvider[r.provider].requests++;
