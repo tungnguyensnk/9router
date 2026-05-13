@@ -12,7 +12,7 @@ const fmtPercent = (cached, total) => {
 
 export default function OverviewCards({ stats }) {
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 sm:gap-4">
+    <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 sm:gap-4">
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Total Requests</span>
         <span className="truncate text-2xl font-bold">{fmt(stats.totalRequests)}</span>
@@ -29,10 +29,6 @@ export default function OverviewCards({ stats }) {
         <span className="text-text-muted text-sm uppercase font-semibold">Cache Read</span>
         <span className="truncate text-2xl font-bold text-cyan-500">{fmt(stats.totalCachedTokens)}</span>
         <span className="text-[10px] text-text-muted">{fmtPercent(stats.totalCachedTokens, stats.totalPromptTokens)} of input</span>
-      </Card>
-      <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
-        <span className="text-text-muted text-sm uppercase font-semibold">Cache Write</span>
-        <span className="truncate text-2xl font-bold text-violet-500">{fmt(stats.totalCacheCreationTokens)}</span>
       </Card>
       <Card className="flex min-w-0 flex-col gap-1 px-4 py-3">
         <span className="text-text-muted text-sm uppercase font-semibold">Est. Cost</span>
