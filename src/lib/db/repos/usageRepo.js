@@ -218,28 +218,7 @@ export async function getActiveRequests() {
   }
 
   await ensureRingInitialized();
-  const seen = new Set();
-  const recentRequests = [...recentRing.items]
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .map((e) => {
-      const t = e.tokens || {};
-      return {
-        timestamp: e.timestamp, model: e.model, provider: e.provider || "",
-        promptTokens: t.prompt_tokens || t.input_tokens || 0,
-        completionTokens: t.completion_tokens || t.output_tokens || 0,
-        cachedTokens: t.cached_tokens || t.cache_read_input_tokens || 0,
-        status: e.status || "ok",
-      };
-    })
-    .filter((e) => {
-      if (e.promptTokens === 0 && e.completionTokens === 0) return false;
-      const minute = e.timestamp ? e.timestamp.slice(0, 16) : "";
-      const key = `${e.model}|${e.provider}|${e.promptTokens}|${e.completionTokens}|${minute}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 20);
+  const recentRequests = buildRecentRequests(recentRing.items);
 
   const errorProvider = (Date.now() - lastErrorProvider.ts < 10000) ? lastErrorProvider.provider : "";
   return { activeRequests, recentRequests, errorProvider };
@@ -331,6 +310,44 @@ function getPeriodHistoryCutoff(period) {
   return cutoff.toISOString();
 }
 
+function buildRecentRequests(rows) {
+  const merged = new Map();
+
+  for (const row of rows) {
+    const t = parseJson(row.tokens, {}) || row.tokens || {};
+    const key = `${row.timestamp}|${row.model || ""}|${row.provider || ""}`;
+    const current = merged.get(key) || {
+      timestamp: row.timestamp,
+      model: row.model,
+      provider: row.provider || "",
+      promptTokens: 0,
+      completionTokens: 0,
+      cachedTokens: 0,
+      status: row.status || "ok",
+    };
+
+    current.promptTokens = Math.max(current.promptTokens, t.prompt_tokens || t.input_tokens || 0);
+    current.completionTokens = Math.max(current.completionTokens, t.completion_tokens || t.output_tokens || 0);
+    current.cachedTokens = Math.max(current.cachedTokens, t.cached_tokens || t.cache_read_input_tokens || 0);
+    if (row.status) current.status = row.status;
+
+    merged.set(key, current);
+  }
+
+  const seen = new Set();
+  return [...merged.values()]
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .filter((e) => {
+      if (e.promptTokens === 0 && e.completionTokens === 0) return false;
+      const minute = e.timestamp ? e.timestamp.slice(0, 16) : "";
+      const key = `${e.model}|${e.provider}|${e.promptTokens}|${e.completionTokens}|${e.cachedTokens}|${minute}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 20);
+}
+
 export async function getUsageStats(period = "all") {
   const db = await getAdapter();
 
@@ -358,27 +375,7 @@ export async function getUsageStats(period = "all") {
 
   // recentRequests from live history (last 100 entries enough for 20 deduped)
   const recentRows = db.all(`SELECT timestamp, provider, model, tokens, status FROM usageHistory ORDER BY id DESC LIMIT 100`);
-  const seen = new Set();
-  const recentRequests = recentRows
-    .map((r) => {
-      const t = parseJson(r.tokens, {}) || {};
-      return {
-        timestamp: r.timestamp, model: r.model, provider: r.provider || "",
-        promptTokens: t.prompt_tokens || t.input_tokens || 0,
-        completionTokens: t.completion_tokens || t.output_tokens || 0,
-        cachedTokens: t.cached_tokens || t.cache_read_input_tokens || 0,
-        status: r.status || "ok",
-      };
-    })
-    .filter((e) => {
-      if (e.promptTokens === 0 && e.completionTokens === 0) return false;
-      const minute = e.timestamp ? e.timestamp.slice(0, 16) : "";
-      const key = `${e.model}|${e.provider}|${e.promptTokens}|${e.completionTokens}|${minute}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 20);
+  const recentRequests = buildRecentRequests(recentRows);
 
   const stats = {
     totalRequests: 0,
