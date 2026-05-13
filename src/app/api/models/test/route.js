@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getApiKeys } from "@/lib/localDb";
-import { UPDATER_CONFIG } from "@/shared/constants/config";
+import { APP_PORT } from "@/shared/constants/config";
 
 // POST /api/models/test - Ping a single model via internal completions or embeddings
 export async function POST(request) {
@@ -8,7 +8,7 @@ export async function POST(request) {
     const { model, kind } = await request.json();
     if (!model) return NextResponse.json({ error: "Model required" }, { status: 400 });
 
-    const baseUrl = `http://127.0.0.1:${process.env.PORT || UPDATER_CONFIG.appPort}`;
+    const baseUrl = `http://127.0.0.1:${process.env.PORT || APP_PORT}`;
 
     // Get an active internal API key for auth (if requireApiKey is enabled)
     let apiKey = null;

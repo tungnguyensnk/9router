@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getProviderConnectionById, getApiKeys } from "@/lib/localDb";
 import { getProviderModels, PROVIDER_ID_TO_ALIAS } from "open-sse/config/providerModels.js";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
-import { UPDATER_CONFIG } from "@/shared/constants/config";
+import { APP_PORT } from "@/shared/constants/config";
 
 /**
  * Get an active API key to pass through auth when requireApiKey is enabled.
@@ -65,7 +65,7 @@ export async function POST(request, { params }) {
 
     let models = getProviderModels(alias);
 
-    const baseUrl = `http://127.0.0.1:${process.env.PORT || UPDATER_CONFIG.appPort}`;
+    const baseUrl = `http://127.0.0.1:${process.env.PORT || APP_PORT}`;
 
     // Compatible providers: fetch live model list
     if (isCompatible && models.length === 0) {

@@ -6,10 +6,8 @@ import path from "path";
 import os from "os";
 import crypto from "crypto";
 import { DEFAULT_PLUGINS, LOCAL_STDIO_PLUGINS, buildManagedMcpServers } from "@/shared/constants/coworkPlugins";
-import { UPDATER_CONFIG } from "@/shared/constants/config";
+import { APP_PORT } from "@/shared/constants/config";
 import { DATA_DIR } from "@/lib/dataDir";
-
-const APP_PORT = UPDATER_CONFIG.appPort;
 
 const PROVIDER = "gateway";
 
