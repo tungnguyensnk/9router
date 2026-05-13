@@ -60,8 +60,12 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       return null;
     }
 
+    const allowedConnectionIds = options?.allowedConnectionIds || null;
+    const allowedSet = allowedConnectionIds?.length > 0 ? new Set(allowedConnectionIds) : null;
+
     // Filter out model-locked and excluded connections
     const availableConnections = connections.filter(c => {
+      if (allowedSet && !allowedSet.has(c.id)) return false;
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
       return true;

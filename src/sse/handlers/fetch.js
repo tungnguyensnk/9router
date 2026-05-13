@@ -80,16 +80,16 @@ export async function handleFetch(request) {
 
   // Combo expansion: providerInput may be a combo name → run fallback/round-robin across providers
   const combos = await getCombos();
-  const comboModels = getComboModelsFromData(providerInput, combos);
-  if (comboModels) {
+  const comboData = getComboModelsFromData(providerInput, combos);
+  if (comboData) {
     const comboStrategies = settings.comboStrategies || {};
     const comboStrategy = comboStrategies[providerInput]?.fallbackStrategy || settings.comboStrategy || "fallback";
     const comboStickyLimit = settings.comboStickyRoundRobinLimit;
-    log.info("FETCH", `Combo "${providerInput}" with ${comboModels.length} providers (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+    log.info("FETCH", `Combo "${providerInput}" with ${comboData.models.length} providers (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
     return handleComboChat({
       body,
-      models: comboModels,
-      handleSingleModel: (b, m) => handleSingleProviderFetch(b, m, request, apiKey, settings),
+      models: comboData.models,
+      handleSingleModel: (b, m) => handleSingleProviderFetch(b, m, request, apiKey, settings, { allowedConnectionIds: comboData.accountFilters?.[m] || [] }),
       log,
       comboName: providerInput,
       comboStrategy,
@@ -100,7 +100,7 @@ export async function handleFetch(request) {
   return handleSingleProviderFetch(body, providerInput, request, apiKey, settings);
 }
 
-async function handleSingleProviderFetch(body, providerInput, request, apiKey, settings) {
+async function handleSingleProviderFetch(body, providerInput, request, apiKey, settings, options = {}) {
   const targetUrl = body.url;
   const format = body.format;
   const maxCharacters = body.max_characters;
@@ -150,7 +150,7 @@ async function handleSingleProviderFetch(body, providerInput, request, apiKey, s
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(providerId, excludeConnectionIds);
+    const credentials = await getProviderCredentials(providerId, excludeConnectionIds, null, { allowedConnectionIds: options.allowedConnectionIds });
 
     if (!credentials || credentials.allRateLimited) {
       if (credentials?.allRateLimited) {

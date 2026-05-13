@@ -5,8 +5,20 @@ import Modal from "./Modal";
 import Input from "./Input";
 import Button from "./Button";
 import ModelSelectModal from "./ModelSelectModal";
+import { getProviderAlias } from "@/shared/constants/providers";
 
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
+
+function getModelConnectionCandidates(model, connections) {
+  if (!model || !model.includes("/")) return [];
+  const modelPrefix = model.split("/")[0];
+  return connections.filter((conn) => {
+    if (conn.isActive === false) return false;
+    const providerAlias = getProviderAlias(conn.provider);
+    const providerPrefix = conn.providerSpecificData?.prefix;
+    return modelPrefix === conn.provider || modelPrefix === providerAlias || modelPrefix === providerPrefix;
+  });
+}
 
 // Inline editable model item
 function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown, onRemove }) {
@@ -57,6 +69,7 @@ export default function ComboFormModal({ isOpen, combo, onClose, onSave, activeP
     : "";
   const [name, setName] = useState(initialName);
   const [models, setModels] = useState(combo?.models || []);
+  const [accountFilters, setAccountFilters] = useState(combo?.accountFilters || {});
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [saving, setSaving] = useState(false);
   const [nameError, setNameError] = useState("");
@@ -84,12 +97,27 @@ export default function ComboFormModal({ isOpen, combo, onClose, onSave, activeP
   };
 
   const handleAddModel = (model) => {
-    if (!models.includes(model.value)) setModels([...models, model.value]);
+    if (!models.includes(model.value)) {
+      setModels([...models, model.value]);
+    }
   };
   const handleDeselectModel = (model) => {
     setModels(models.filter((m) => m !== model.value));
+    setAccountFilters((prev) => {
+      const next = { ...prev };
+      delete next[model.value];
+      return next;
+    });
   };
-  const handleRemoveModel = (i) => setModels(models.filter((_, idx) => idx !== i));
+  const handleRemoveModel = (i) => {
+    const removedModel = models[i];
+    setModels(models.filter((_, idx) => idx !== i));
+    setAccountFilters((prev) => {
+      const next = { ...prev };
+      delete next[removedModel];
+      return next;
+    });
+  };
   const handleMoveUp = (i) => {
     if (i === 0) return;
     const a = [...models]; [a[i - 1], a[i]] = [a[i], a[i - 1]]; setModels(a);
@@ -102,7 +130,15 @@ export default function ComboFormModal({ isOpen, combo, onClose, onSave, activeP
   const handleSave = async () => {
     if (!validateName(name)) return;
     setSaving(true);
-    await onSave({ name: forcePrefix + name.trim(), models });
+    await onSave({
+      name: forcePrefix + name.trim(),
+      models,
+      accountFilters: Object.fromEntries(
+        models
+          .filter((model) => Array.isArray(accountFilters[model]) && accountFilters[model].length > 0)
+          .map((model) => [model, accountFilters[model]])
+      )
+    });
     setSaving(false);
   };
 
@@ -155,6 +191,79 @@ export default function ComboFormModal({ isOpen, combo, onClose, onSave, activeP
               <span className="material-symbols-outlined text-[16px]">add</span>
               Add Model
             </button>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Accounts By Model</label>
+            {models.length === 0 ? (
+              <div className="text-center py-3 border border-dashed border-black/10 dark:border-white/10 rounded-lg bg-black/[0.01] dark:bg-white/[0.01]">
+                <p className="text-xs text-text-muted">Add model first</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[260px] overflow-y-auto">
+                {models.map((model) => {
+                  const hasCustomAccounts = Object.prototype.hasOwnProperty.call(accountFilters, model);
+                  const selectedAccounts = hasCustomAccounts ? accountFilters[model] || [] : [];
+                  const useAllAccounts = !hasCustomAccounts;
+                  const availableConnections = getModelConnectionCandidates(model, activeProviders);
+                  return (
+                    <div key={model} className="rounded-lg border border-black/10 dark:border-white/10 p-2">
+                      <div className="mb-2">
+                        <code className="block truncate font-mono text-[11px] text-text-main">{model}</code>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setAccountFilters((prev) => {
+                            const next = { ...prev };
+                            if (useAllAccounts) next[model] = [];
+                            else delete next[model];
+                            return next;
+                          })}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${useAllAccounts ? "bg-primary" : "bg-black/10 dark:bg-white/10"}`}
+                        >
+                          <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${useAllAccounts ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
+                        </button>
+                        <span className="text-xs text-text-main">All accounts for this model</span>
+                      </div>
+                      {!useAllAccounts && (
+                        <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto border border-black/10 dark:border-white/10 rounded-lg p-2">
+                          {availableConnections.length === 0 ? (
+                            <p className="text-xs text-text-muted text-center py-2">No accounts available</p>
+                          ) : (
+                            availableConnections.map((conn) => {
+                              const isSelected = selectedAccounts.includes(conn.id);
+                              return (
+                                <label key={`${model}-${conn.id}`} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-black/[0.03] dark:hover:bg-white/[0.03] cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setAccountFilters((prev) => {
+                                        const current = (prev[model] || []).filter(Boolean);
+                                        return {
+                                          ...prev,
+                                          [model]: isSelected
+                                            ? current.filter((id) => id !== conn.id)
+                                            : [...current, conn.id],
+                                        };
+                                      });
+                                    }}
+                                    className="rounded border-border text-primary focus:ring-primary/50 h-3.5 w-3.5"
+                                  />
+                                  <span className="text-xs text-text-main truncate">{conn.name || conn.email || conn.provider}</span>
+                                  <span className="text-[10px] text-text-muted ml-auto shrink-0">{conn.provider}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-2 pt-1 sm:flex-row">

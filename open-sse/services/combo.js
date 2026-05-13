@@ -77,18 +77,16 @@ export function resetComboRotation(comboName) {
  * Get combo models from combos data
  * @param {string} modelStr - Model string to check
  * @param {Array|Object} combosData - Array of combos or object with combos
- * @returns {string[]|null} Array of models or null if not a combo
+ * @returns {{models: string[], accountFilters: Record<string, string[]>}|null} Combo data or null if not a combo
  */
 export function getComboModelsFromData(modelStr, combosData) {
-  // Don't check if it's in provider/model format
   if (modelStr.includes("/")) return null;
   
-  // Handle both array and object formats
   const combos = Array.isArray(combosData) ? combosData : (combosData?.combos || []);
   
   const combo = combos.find(c => c.name === modelStr);
   if (combo && combo.models && combo.models.length > 0) {
-    return combo.models;
+    return { models: combo.models, accountFilters: combo.accountFilters || {} };
   }
   return null;
 }

@@ -90,19 +90,19 @@ export async function handleChat(request, clientRawRequest = null) {
   if (bypassResponse) return bypassResponse.response || bypassResponse;
 
   // Check if model is a combo (has multiple models with fallback)
-  const comboModels = await getComboModels(modelStr);
-  if (comboModels) {
+  const comboData = await getComboModels(modelStr);
+  if (comboData) {
     // Check for combo-specific strategy first, fallback to global
     const comboStrategies = settings.comboStrategies || {};
     const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
     const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
     
     const comboStickyLimit = settings.comboStickyRoundRobinLimit;
-    log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+    log.info("CHAT", `Combo "${modelStr}" with ${comboData.models.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
     return handleComboChat({
       body,
-      models: comboModels,
-      handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+      models: comboData.models,
+      handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, { allowedConnectionIds: comboData.accountFilters?.[m] || [] }),
       log,
       comboName: modelStr,
       comboStrategy,
@@ -117,13 +117,13 @@ export async function handleChat(request, clientRawRequest = null) {
 /**
  * Handle single model chat request
  */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null) {
+async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, options = {}) {
   const modelInfo = await getModelInfo(modelStr);
 
   // If provider is null, this might be a combo name - check and handle
   if (!modelInfo.provider) {
-    const comboModels = await getComboModels(modelStr);
-    if (comboModels) {
+    const comboData = await getComboModels(modelStr);
+    if (comboData) {
       const chatSettings = await getSettings();
       // Check for combo-specific strategy first, fallback to global
       const comboStrategies = chatSettings.comboStrategies || {};
@@ -131,11 +131,11 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const comboStrategy = comboSpecificStrategy || chatSettings.comboStrategy || "fallback";
       
       const comboStickyLimit = chatSettings.comboStickyRoundRobinLimit;
-      log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
+      log.info("CHAT", `Combo "${modelStr}" with ${comboData.models.length} models (strategy: ${comboStrategy}, sticky: ${comboStickyLimit})`);
       return handleComboChat({
         body,
-        models: comboModels,
-        handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey),
+        models: comboData.models,
+        handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, { allowedConnectionIds: comboData.accountFilters?.[m] || [] }),
         log,
         comboName: modelStr,
         comboStrategy,
@@ -164,7 +164,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
   let lastStatus = null;
 
   while (true) {
-    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model);
+    const credentials = await getProviderCredentials(provider, excludeConnectionIds, model, { allowedConnectionIds: options.allowedConnectionIds });
 
     // All accounts unavailable
     if (!credentials || credentials.allRateLimited) {
