@@ -251,7 +251,9 @@ export default function ProviderLimits() {
       const conns = await fetchConnections();
 
       // Filter eligible connections (OAuth + whitelisted apikey)
-      const eligibleConnections = conns.filter(isUsageEligible);
+      const eligibleConnections = conns.filter(
+        (conn) => isUsageEligible(conn) && (conn.isActive ?? true),
+      );
 
       await Promise.all(
         eligibleConnections.map((conn) => fetchQuota(conn.id, conn.provider)),
@@ -272,7 +274,9 @@ export default function ProviderLimits() {
       const conns = await fetchConnections();
       setConnectionsLoading(false);
 
-      const eligibleConnections = conns.filter(isUsageEligible);
+      const eligibleConnections = conns.filter(
+        (conn) => isUsageEligible(conn) && (conn.isActive ?? true),
+      );
 
       // Mark all as loading before fetching
       const loadingState = {};

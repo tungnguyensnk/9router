@@ -45,12 +45,16 @@ function aggregateEntryToDay(day, entry) {
   const promptTokens = entry.tokens?.prompt_tokens || entry.tokens?.input_tokens || 0;
   const completionTokens = entry.tokens?.completion_tokens || entry.tokens?.output_tokens || 0;
   const cost = entry.cost || 0;
+  const cachedTokens = entry.tokens?.cached_tokens || entry.tokens?.cache_read_input_tokens || 0;
+  const cacheCreationTokens = entry.tokens?.cache_creation_input_tokens || 0;
   const vals = { promptTokens, completionTokens, cost };
 
   day.requests = (day.requests || 0) + 1;
   day.promptTokens = (day.promptTokens || 0) + promptTokens;
   day.completionTokens = (day.completionTokens || 0) + completionTokens;
   day.cost = (day.cost || 0) + cost;
+  day.cachedTokens = (day.cachedTokens || 0) + cachedTokens;
+  day.cacheCreationTokens = (day.cacheCreationTokens || 0) + cacheCreationTokens;
 
   day.byProvider ||= {};
   day.byModel ||= {};
@@ -367,6 +371,7 @@ export async function getUsageStats(period = "all") {
   const stats = {
     totalRequests: 0,
     totalPromptTokens: 0, totalCompletionTokens: 0, totalCost: 0,
+    totalCachedTokens: 0, totalCacheCreationTokens: 0, totalCacheSavings: 0,
     byProvider: {}, byModel: {}, byAccount: {}, byApiKey: {}, byEndpoint: {},
     last10Minutes: [],
     pending: pendingRequests,
@@ -428,6 +433,8 @@ export async function getUsageStats(period = "all") {
       stats.totalPromptTokens += day.promptTokens || 0;
       stats.totalCompletionTokens += day.completionTokens || 0;
       stats.totalCost += day.cost || 0;
+      stats.totalCachedTokens += day.cachedTokens || 0;
+      stats.totalCacheCreationTokens += day.cacheCreationTokens || 0;
 
       for (const [prov, p] of Object.entries(day.byProvider || {})) {
         if (!stats.byProvider[prov]) stats.byProvider[prov] = { requests: 0, promptTokens: 0, completionTokens: 0, cost: 0 };
@@ -542,10 +549,14 @@ export async function getUsageStats(period = "all") {
       const completionTokens = tokens.completion_tokens || 0;
       const entryCost = r.cost || 0;
       const providerDisplayName = providerNodeNameMap[r.provider] || r.provider;
+      const cachedTokens = tokens.cached_tokens || tokens.cache_read_input_tokens || 0;
+      const cacheCreationTokens = tokens.cache_creation_input_tokens || 0;
 
       stats.totalPromptTokens += promptTokens;
       stats.totalCompletionTokens += completionTokens;
       stats.totalCost += entryCost;
+      stats.totalCachedTokens += cachedTokens;
+      stats.totalCacheCreationTokens += cacheCreationTokens;
 
       if (!stats.byProvider[r.provider]) stats.byProvider[r.provider] = { requests: 0, promptTokens: 0, completionTokens: 0, cost: 0 };
       stats.byProvider[r.provider].requests++;
@@ -607,6 +618,12 @@ export async function getUsageStats(period = "all") {
   }
 
   stats.totalRequests = Object.values(stats.byProvider).reduce((sum, p) => sum + (p.requests || 0), 0);
+  if (stats.totalCachedTokens > 0) {
+    const avgInputRate = stats.totalCost > 0 && stats.totalPromptTokens > 0
+      ? (stats.totalCost / (stats.totalPromptTokens + stats.totalCompletionTokens)) * 1000000
+      : 3.0;
+    stats.totalCacheSavings = (stats.totalCachedTokens * avgInputRate * 0.9) / 1000000;
+  }
   return stats;
 }
 
