@@ -89,6 +89,7 @@ export function filterUsageForFormat(usage, targetFormat) {
     default: [
       'prompt_tokens', 'completion_tokens', 'total_tokens',
       'cached_tokens', 'reasoning_tokens',
+      'credits_used',
       'prompt_tokens_details', 'completion_tokens_details',
       'estimated'
     ]
@@ -129,6 +130,7 @@ export function normalizeUsage(usage) {
   assignNumber("cache_creation_input_tokens", usage?.cache_creation_input_tokens);
   assignNumber("cached_tokens", usage?.cached_tokens);
   assignNumber("reasoning_tokens", usage?.reasoning_tokens);
+  assignNumber("credits_used", usage?.credits_used);
 
   // Preserve nested details objects for OpenAI format forwarding
   if (usage?.prompt_tokens_details && typeof usage.prompt_tokens_details === "object") {
@@ -136,6 +138,9 @@ export function normalizeUsage(usage) {
   }
   if (usage?.completion_tokens_details && typeof usage.completion_tokens_details === "object") {
     normalized.completion_tokens_details = usage.completion_tokens_details;
+  }
+  if (usage?.estimated !== undefined) {
+    normalized.estimated = Boolean(usage.estimated);
   }
 
   if (Object.keys(normalized).length === 0) return null;
@@ -201,6 +206,7 @@ export function extractUsage(chunk) {
       prompt_tokens: chunk.usage.prompt_tokens,
       completion_tokens: chunk.usage.completion_tokens || 0,
       cached_tokens: chunk.usage.prompt_tokens_details?.cached_tokens || chunk.usage.prompt_cache_hit_tokens,
+      credits_used: chunk.usage.credits_used,
       reasoning_tokens: chunk.usage.completion_tokens_details?.reasoning_tokens,
       prompt_tokens_details: chunk.usage.prompt_tokens_details,
       completion_tokens_details: chunk.usage.completion_tokens_details
@@ -251,6 +257,122 @@ export function estimateOutputTokens(contentLength) {
   return Math.max(1, Math.floor(contentLength / 4));
 }
 
+function countAnthropicTokens(text) {
+  if (!text) return 0;
+
+  const source = String(text);
+  const chunks = source.match(/\p{L}+|\p{N}{1,3}|\s+|[^\s\p{L}\p{N}]/gu) || [];
+  let total = 0;
+
+  for (const chunk of chunks) {
+    if (!chunk) continue;
+
+    if (/^\s+$/u.test(chunk)) {
+      total += Math.ceil(chunk.length / 4);
+      continue;
+    }
+
+    if (/^\p{L}+$/u.test(chunk)) {
+      total += Math.ceil(chunk.length / 4);
+      continue;
+    }
+
+    if (/^\p{N}{1,3}$/u.test(chunk)) {
+      total += 1;
+      continue;
+    }
+
+    total += 1;
+  }
+
+  return Math.max(1, total);
+}
+
+function collectKiroTextParts(body) {
+  const parts = [];
+
+  const appendText = (value) => {
+    if (typeof value === "string" && value.trim()) {
+      parts.push(value);
+    }
+  };
+
+  const appendToolSpec = (tool) => {
+    const spec = tool?.toolSpecification || tool;
+    appendText(spec?.name);
+    appendText(spec?.description);
+    if (spec?.inputSchema?.json) {
+      appendText(JSON.stringify(spec.inputSchema.json));
+    }
+  };
+
+  const appendToolResult = (toolResult) => {
+    appendText(toolResult?.toolUseId);
+    if (Array.isArray(toolResult?.content)) {
+      for (const item of toolResult.content) {
+        appendText(item?.text);
+      }
+    }
+  };
+
+  const appendUserMessage = (message) => {
+    appendText(message?.content);
+    appendText(message?.modelId);
+    const context = message?.userInputMessageContext;
+    if (!context) return;
+    if (Array.isArray(context.tools)) {
+      context.tools.forEach(appendToolSpec);
+    }
+    if (Array.isArray(context.toolResults)) {
+      context.toolResults.forEach(appendToolResult);
+    }
+  };
+
+  const appendAssistantMessage = (message) => {
+    appendText(message?.content);
+    if (Array.isArray(message?.toolUses)) {
+      for (const toolUse of message.toolUses) {
+        appendText(toolUse?.name);
+        if (toolUse?.input && typeof toolUse.input === "object") {
+          appendText(JSON.stringify(toolUse.input));
+        }
+      }
+    }
+  };
+
+  const conversationState = body?.conversationState;
+  appendUserMessage(conversationState?.currentMessage?.userInputMessage);
+
+  if (Array.isArray(conversationState?.history)) {
+    for (const item of conversationState.history) {
+      appendUserMessage(item?.userInputMessage);
+      appendAssistantMessage(item?.assistantResponseMessage);
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
+export function estimateKiroInputTokens(body) {
+  if (!body || typeof body !== "object") return 0;
+  try {
+    const semanticText = collectKiroTextParts(body);
+    if (!semanticText) return 0;
+    return countAnthropicTokens(semanticText);
+  } catch {
+    return estimateInputTokens(body);
+  }
+}
+
+export function estimateKiroOutputTokens(outputText) {
+  if (!outputText) return 0;
+  try {
+    return countAnthropicTokens(outputText);
+  } catch {
+    return estimateOutputTokens(String(outputText).length);
+  }
+}
+
 /**
  * Format usage object based on target format
  * @param {number} inputTokens - Input/prompt tokens
@@ -282,7 +404,18 @@ export function formatUsage(inputTokens, outputTokens, targetFormat) {
  * @param {number} contentLength - Content length for output token estimation
  * @param {string} targetFormat - Target format from FORMATS constant
  */
-export function estimateUsage(body, contentLength, targetFormat = FORMATS.OPENAI) {
+export function estimateUsage(body, contentLength, targetFormat = FORMATS.OPENAI, options = {}) {
+  const provider = options?.provider;
+  const outputText = options?.outputText || "";
+
+  if (provider === "kiro") {
+    return formatUsage(
+      estimateKiroInputTokens(body),
+      estimateKiroOutputTokens(outputText),
+      targetFormat
+    );
+  }
+
   return formatUsage(
     estimateInputTokens(body),
     estimateOutputTokens(contentLength),
@@ -322,6 +455,9 @@ export function logUsage(provider, usage, model = null, connectionId = null, api
   const reasoning = usage.reasoning_tokens;
   if (reasoning) msg += ` | reasoning=${reasoning}`;
 
+  const creditsUsed = usage.credits_used;
+  if (creditsUsed) msg += ` | credits=${creditsUsed}`;
+
   console.log(msg);
 
   // Save to usage DB
@@ -330,7 +466,9 @@ export function logUsage(provider, usage, model = null, connectionId = null, api
     completion_tokens: outTokens,
     cache_read_input_tokens: cacheRead || 0,
     cache_creation_input_tokens: cacheCreation || 0,
-    reasoning_tokens: reasoning || 0
+    reasoning_tokens: reasoning || 0,
+    credits_used: creditsUsed || 0,
+    estimated: Boolean(usage.estimated)
   };
   saveRequestUsage({ model, provider, connectionId, tokens, apiKey: apiKey || undefined }).catch(() => { });
   appendRequestLog({ model, provider, connectionId, tokens, status: "200 OK" }).catch(() => { });

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { refreshKiroToken } from "../services/tokenRefresh.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { HTTP_STATUS, RETRY_CONFIG, DEFAULT_RETRY_CONFIG, resolveRetryEntry } from "../config/runtimeConfig.js";
+import { estimateKiroInputTokens, estimateKiroOutputTokens } from "../utils/usageTracking.js";
 
 /**
  * KiroExecutor - Executor for Kiro AI (AWS CodeWhisperer)
@@ -69,7 +70,7 @@ export class KiroExecutor extends BaseExecutor {
       // Success - transform and return
       // For Kiro, we need to transform the binary EventStream to SSE
       // Create a TransformStream to convert binary to SSE text
-      const transformedResponse = this.transformEventStreamToSSE(response, model);
+      const transformedResponse = this.transformEventStreamToSSE(response, model, transformedBody);
       return { response: transformedResponse, url, headers, transformedBody };
     }
   }
@@ -78,7 +79,7 @@ export class KiroExecutor extends BaseExecutor {
    * Transform AWS EventStream binary response to SSE text stream
    * Using TransformStream instead of ReadableStream.pull() to avoid Workers timeout
    */
-  transformEventStreamToSSE(response, model) {
+  transformEventStreamToSSE(response, model, requestBody = null) {
     let buffer = new Uint8Array(0);
     let chunkIndex = 0;
     const responseId = `chatcmpl-${Date.now()}`;
@@ -119,12 +120,14 @@ export class KiroExecutor extends BaseExecutor {
           
           // Track total content length for token estimation
           if (!state.totalContentLength) state.totalContentLength = 0;
+          if (!state.fullContent) state.fullContent = "";
           if (!state.contextUsagePercentage) state.contextUsagePercentage = 0;
 
           // Handle assistantResponseEvent
           if (eventType === "assistantResponseEvent" && event.payload?.content) {
             const content = event.payload.content;
             state.totalContentLength += content.length;
+            state.fullContent += content;
             
             const chunk = {
               id: responseId,
@@ -145,6 +148,7 @@ export class KiroExecutor extends BaseExecutor {
 
           // Handle codeEvent
           if (eventType === "codeEvent" && event.payload?.content) {
+            state.fullContent += event.payload.content;
             const chunk = {
               id: responseId,
               object: "chat.completion.chunk",
@@ -267,6 +271,14 @@ export class KiroExecutor extends BaseExecutor {
 
           // Handle meteringEvent - mark that we received it
           if (eventType === "meteringEvent") {
+            const metering = event.payload?.meteringEvent || event.payload;
+            const creditsUsed = Number(metering?.usage);
+            if (Number.isFinite(creditsUsed) && creditsUsed > 0) {
+              state.usage = {
+                ...(state.usage || {}),
+                credits_used: creditsUsed
+              };
+            }
             state.hasMeteringEvent = true;
           }
 
@@ -280,6 +292,7 @@ export class KiroExecutor extends BaseExecutor {
               
               if (inputTokens > 0 || outputTokens > 0) {
                 state.usage = {
+                  ...(state.usage || {}),
                   prompt_tokens: inputTokens,
                   completion_tokens: outputTokens,
                   total_tokens: inputTokens + outputTokens
@@ -291,24 +304,14 @@ export class KiroExecutor extends BaseExecutor {
           // Emit final chunk only after receiving BOTH meteringEvent AND contextUsageEvent
           if (state.hasMeteringEvent && state.hasContextUsage && !state.finishEmitted) {
             state.finishEmitted = true;
-            
-            // Estimate tokens if not available from events
-            if (!state.usage) {
-              // Estimate output tokens from content length
-              const estimatedOutputTokens = state.totalContentLength > 0 
-                ? Math.max(1, Math.floor(state.totalContentLength / 4))
-                : 0;
-              
-              // Estimate input tokens from contextUsagePercentage
-              // Kiro models typically have 200k context window
-              const estimatedInputTokens = state.contextUsagePercentage > 0
-                ? Math.floor(state.contextUsagePercentage * 200000 / 100)
-                : 0;
-              
+
+            if (!state.usage?.prompt_tokens && requestBody) {
               state.usage = {
-                prompt_tokens: estimatedInputTokens,
-                completion_tokens: estimatedOutputTokens,
-                total_tokens: estimatedInputTokens + estimatedOutputTokens
+                ...(state.usage || {}),
+                prompt_tokens: estimateKiroInputTokens(requestBody),
+                completion_tokens: estimateKiroOutputTokens(state.fullContent || ""),
+                total_tokens: estimateKiroInputTokens(requestBody) + estimateKiroOutputTokens(state.fullContent || ""),
+                estimated: true
               };
             }
             
@@ -342,6 +345,15 @@ export class KiroExecutor extends BaseExecutor {
         // Emit finish chunk if not already sent
         if (!state.finishEmitted) {
           state.finishEmitted = true;
+          if (!state.usage?.prompt_tokens && requestBody) {
+            state.usage = {
+              ...(state.usage || {}),
+              prompt_tokens: estimateKiroInputTokens(requestBody),
+              completion_tokens: estimateKiroOutputTokens(state.fullContent || ""),
+              total_tokens: estimateKiroInputTokens(requestBody) + estimateKiroOutputTokens(state.fullContent || ""),
+              estimated: true
+            };
+          }
           const finishChunk = {
             id: responseId,
             object: "chat.completion.chunk",
@@ -353,6 +365,9 @@ export class KiroExecutor extends BaseExecutor {
               finish_reason: state.hasToolCalls ? "tool_calls" : "stop"
             }]
           };
+          if (state.usage) {
+            finishChunk.usage = state.usage;
+          }
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(finishChunk)}\n\n`));
         }
 

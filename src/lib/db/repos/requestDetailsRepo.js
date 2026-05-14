@@ -150,8 +150,16 @@ export async function getRequestDetails(filter = {}) {
   if (filter.model) { conds.push("model = ?"); params.push(filter.model); }
   if (filter.connectionId) { conds.push("connectionId = ?"); params.push(filter.connectionId); }
   if (filter.status) { conds.push("status = ?"); params.push(filter.status); }
-  if (filter.startDate) { conds.push("timestamp >= ?"); params.push(new Date(filter.startDate).toISOString()); }
-  if (filter.endDate) { conds.push("timestamp <= ?"); params.push(new Date(filter.endDate).toISOString()); }
+  if (filter.startDate) {
+    const startIso = new Date(filter.startDate).toISOString();
+    conds.push("timestamp >= ?");
+    params.push(startIso);
+  }
+  if (filter.endDate) {
+    const endIso = new Date(filter.endDate).toISOString();
+    conds.push("timestamp <= ?");
+    params.push(endIso);
+  }
 
   const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
   const cntRow = db.get(`SELECT COUNT(*) as c FROM requestDetails ${where}`, params);
@@ -172,6 +180,14 @@ export async function getRequestDetails(filter = {}) {
     details,
     pagination: { page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   };
+}
+
+export async function getDistinctRequestDetailProviders() {
+  const db = await getAdapter();
+  const rows = db.all(
+    `SELECT DISTINCT provider FROM requestDetails WHERE provider IS NOT NULL AND provider != '' ORDER BY provider ASC`
+  );
+  return rows.map((row) => row.provider).filter(Boolean);
 }
 
 export async function getRequestDetailById(id) {

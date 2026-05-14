@@ -31,6 +31,20 @@ export async function GET(request) {
         { status: 400 }
       );
     }
+
+    if (startDate && Number.isNaN(Date.parse(startDate))) {
+      return NextResponse.json(
+        { error: "Invalid startDate" },
+        { status: 400 }
+      );
+    }
+
+    if (endDate && Number.isNaN(Date.parse(endDate))) {
+      return NextResponse.json(
+        { error: "Invalid endDate" },
+        { status: 400 }
+      );
+    }
     
     const filter = {
       page,
