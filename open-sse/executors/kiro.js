@@ -181,6 +181,9 @@ export class KiroExecutor extends BaseExecutor {
               if (isNewTool) {
                 toolIndex = state.toolCallIndex++;
                 state.seenToolIds.set(toolCallId, toolIndex);
+                if (toolName) {
+                  state.fullContent += toolName;
+                }
 
                 const startChunk = {
                   id: responseId,
@@ -219,6 +222,10 @@ export class KiroExecutor extends BaseExecutor {
                   argumentsStr = JSON.stringify(toolInput);
                 } else {
                   continue;
+                }
+
+                if (argumentsStr) {
+                  state.fullContent += argumentsStr;
                 }
 
                 const argsChunk = {
