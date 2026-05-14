@@ -83,9 +83,7 @@ function CollapsibleSection({ title, children, defaultOpen = false, icon = null 
 }
 
 function getInputTokens(tokens) {
-  const prompt = tokens?.prompt_tokens || tokens?.input_tokens || 0;
-  const cache = tokens?.cached_tokens || tokens?.cache_read_input_tokens || 0;
-  return prompt < cache ? cache : prompt;
+  return tokens?.prompt_tokens || tokens?.input_tokens || 0;
 }
 
 function getOutputTokens(tokens) {

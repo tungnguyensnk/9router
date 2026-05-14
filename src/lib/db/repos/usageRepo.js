@@ -695,6 +695,40 @@ function formatLogDate(date = new Date()) {
   return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+export async function deleteUsageHistory(mode = "all", customRange = null) {
+  const db = await getAdapter();
+
+  const periodMs = { "1d": 86400000, "7d": 604800000, "30d": 2592000000 };
+
+  db.transaction(() => {
+    if (mode === "all") {
+      db.run(`DELETE FROM usageHistory`);
+      db.run(`DELETE FROM usageDaily`);
+      db.run(`DELETE FROM requestDetails`);
+      db.run(`DELETE FROM _meta WHERE key = 'totalRequestsLifetime'`);
+    } else if (mode === "custom" && customRange) {
+      const { startDate, endDate } = customRange;
+      if (startDate && endDate) {
+        db.run(`DELETE FROM usageHistory WHERE timestamp >= ? AND timestamp <= ?`, [new Date(startDate).toISOString(), new Date(endDate).toISOString()]);
+        db.run(`DELETE FROM requestDetails WHERE timestamp >= ? AND timestamp <= ?`, [new Date(startDate).toISOString(), new Date(endDate).toISOString()]);
+        const startKey = getLocalDateKey(startDate);
+        const endKey = getLocalDateKey(endDate);
+        db.run(`DELETE FROM usageDaily WHERE dateKey >= ? AND dateKey <= ?`, [startKey, endKey]);
+      }
+    } else if (periodMs[mode]) {
+      const cutoff = new Date(Date.now() - periodMs[mode]).toISOString();
+      db.run(`DELETE FROM usageHistory WHERE timestamp <= ?`, [cutoff]);
+      db.run(`DELETE FROM requestDetails WHERE timestamp <= ?`, [cutoff]);
+      const cutoffKey = getLocalDateKey(new Date(Date.now() - periodMs[mode]));
+      db.run(`DELETE FROM usageDaily WHERE dateKey <= ?`, [cutoffKey]);
+    }
+  });
+
+  recentRing.items = [];
+  recentRing.initialized = false;
+  statsEmitter.emit("update");
+}
+
 // No-op: request log is now derived from usageHistory table on read.
 export async function appendRequestLog() {}
 

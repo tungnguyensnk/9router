@@ -2,6 +2,6 @@
 export {
   statsEmitter, trackPendingRequest, getActiveRequests,
   saveRequestUsage, getUsageHistory, getUsageStats, getChartData,
-  appendRequestLog, getRecentLogs,
+  appendRequestLog, getRecentLogs, deleteUsageHistory,
   saveRequestDetail, getRequestDetails, getDistinctRequestDetailProviders, getRequestDetailById,
 } from "@/lib/db/index.js";
