@@ -288,82 +288,6 @@ function countAnthropicTokens(text) {
   return Math.max(1, total);
 }
 
-function collectKiroTextParts(body) {
-  const parts = [];
-
-  const appendText = (value) => {
-    if (typeof value === "string" && value.trim()) {
-      parts.push(value);
-    }
-  };
-
-  const appendToolSpec = (tool) => {
-    const spec = tool?.toolSpecification || tool;
-    appendText(spec?.name);
-    appendText(spec?.description);
-    if (spec?.inputSchema?.json) {
-      appendText(JSON.stringify(spec.inputSchema.json));
-    }
-  };
-
-  const appendToolResult = (toolResult) => {
-    appendText(toolResult?.toolUseId);
-    if (Array.isArray(toolResult?.content)) {
-      for (const item of toolResult.content) {
-        appendText(item?.text);
-      }
-    }
-  };
-
-  const appendUserMessage = (message) => {
-    appendText(message?.content);
-    appendText(message?.modelId);
-    const context = message?.userInputMessageContext;
-    if (!context) return;
-    if (Array.isArray(context.tools)) {
-      context.tools.forEach(appendToolSpec);
-    }
-    if (Array.isArray(context.toolResults)) {
-      context.toolResults.forEach(appendToolResult);
-    }
-  };
-
-  const appendAssistantMessage = (message) => {
-    appendText(message?.content);
-    if (Array.isArray(message?.toolUses)) {
-      for (const toolUse of message.toolUses) {
-        appendText(toolUse?.name);
-        if (toolUse?.input && typeof toolUse.input === "object") {
-          appendText(JSON.stringify(toolUse.input));
-        }
-      }
-    }
-  };
-
-  const conversationState = body?.conversationState;
-  appendUserMessage(conversationState?.currentMessage?.userInputMessage);
-
-  if (Array.isArray(conversationState?.history)) {
-    for (const item of conversationState.history) {
-      appendUserMessage(item?.userInputMessage);
-      appendAssistantMessage(item?.assistantResponseMessage);
-    }
-  }
-
-  return parts.join("\n\n");
-}
-
-export function estimateKiroInputTokens(body) {
-  if (!body || typeof body !== "object") return 0;
-  try {
-    const semanticText = collectKiroTextParts(body);
-    if (!semanticText) return 0;
-    return countAnthropicTokens(semanticText);
-  } catch {
-    return estimateInputTokens(body);
-  }
-}
-
 export function estimateKiroOutputTokens(outputText) {
   if (!outputText) return 0;
   try {
@@ -410,7 +334,7 @@ export function estimateUsage(body, contentLength, targetFormat = FORMATS.OPENAI
 
   if (provider === "kiro") {
     return formatUsage(
-      estimateKiroInputTokens(body),
+      estimateInputTokens(body),
       estimateKiroOutputTokens(outputText),
       targetFormat
     );

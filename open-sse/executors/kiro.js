@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { refreshKiroToken } from "../services/tokenRefresh.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { HTTP_STATUS, RETRY_CONFIG, DEFAULT_RETRY_CONFIG, resolveRetryEntry } from "../config/runtimeConfig.js";
-import { estimateKiroInputTokens, estimateKiroOutputTokens } from "../utils/usageTracking.js";
+import { estimateInputTokens, estimateKiroOutputTokens } from "../utils/usageTracking.js";
 
 /**
  * KiroExecutor - Executor for Kiro AI (AWS CodeWhisperer)
@@ -313,11 +313,14 @@ export class KiroExecutor extends BaseExecutor {
             state.finishEmitted = true;
 
             if (!state.usage?.prompt_tokens && requestBody) {
+              const estimatedInputTokens = state.contextUsagePercentage > 0
+                ? Math.floor(state.contextUsagePercentage * 200000 / 100)
+                : estimateInputTokens(requestBody);
               state.usage = {
                 ...(state.usage || {}),
-                prompt_tokens: estimateKiroInputTokens(requestBody),
+                prompt_tokens: estimatedInputTokens,
                 completion_tokens: estimateKiroOutputTokens(state.fullContent || ""),
-                total_tokens: estimateKiroInputTokens(requestBody) + estimateKiroOutputTokens(state.fullContent || ""),
+                total_tokens: estimatedInputTokens + estimateKiroOutputTokens(state.fullContent || ""),
                 estimated: true
               };
             }
@@ -353,11 +356,14 @@ export class KiroExecutor extends BaseExecutor {
         if (!state.finishEmitted) {
           state.finishEmitted = true;
           if (!state.usage?.prompt_tokens && requestBody) {
+            const estimatedInputTokens = state.contextUsagePercentage > 0
+              ? Math.floor(state.contextUsagePercentage * 200000 / 100)
+              : estimateInputTokens(requestBody);
             state.usage = {
               ...(state.usage || {}),
-              prompt_tokens: estimateKiroInputTokens(requestBody),
+              prompt_tokens: estimatedInputTokens,
               completion_tokens: estimateKiroOutputTokens(state.fullContent || ""),
-              total_tokens: estimateKiroInputTokens(requestBody) + estimateKiroOutputTokens(state.fullContent || ""),
+              total_tokens: estimatedInputTokens + estimateKiroOutputTokens(state.fullContent || ""),
               estimated: true
             };
           }
