@@ -6,6 +6,28 @@ import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { HTTP_STATUS, RETRY_CONFIG, DEFAULT_RETRY_CONFIG, resolveRetryEntry } from "../config/runtimeConfig.js";
 import { estimateInputTokens, estimateKiroOutputTokens } from "../utils/usageTracking.js";
 
+const KIRO_CONTEXT_WINDOWS = {
+  auto: 200000,
+  "claude-opus-4.7": 1000000,
+  "claude-opus-4.6": 1000000,
+  "claude-opus-4.5": 200000,
+  "claude-sonnet-4.6": 1000000,
+  "claude-sonnet-4.5": 200000,
+  "claude-sonnet-4.0": 200000,
+  "claude-sonnet-4": 200000,
+  "claude-haiku-4.5": 200000,
+  "deepseek-3.2": 128000,
+  "minimax-m2.5": 200000,
+  "minimax-m2.1": 200000,
+  "glm-5": 200000,
+  "qwen3-coder-next": 256000
+};
+
+function getKiroContextWindow(model) {
+  const normalizedModel = String(model || "").trim().toLowerCase();
+  return KIRO_CONTEXT_WINDOWS[normalizedModel] || 200000;
+}
+
 /**
  * KiroExecutor - Executor for Kiro AI (AWS CodeWhisperer)
  * Uses AWS CodeWhisperer streaming API with AWS EventStream binary format
@@ -314,7 +336,7 @@ export class KiroExecutor extends BaseExecutor {
 
             if (!state.usage?.prompt_tokens && requestBody) {
               const estimatedInputTokens = state.contextUsagePercentage > 0
-                ? Math.floor(state.contextUsagePercentage * 200000 / 100)
+                ? Math.floor(state.contextUsagePercentage * getKiroContextWindow(model) / 100)
                 : estimateInputTokens(requestBody);
               state.usage = {
                 ...(state.usage || {}),
@@ -357,7 +379,7 @@ export class KiroExecutor extends BaseExecutor {
           state.finishEmitted = true;
           if (!state.usage?.prompt_tokens && requestBody) {
             const estimatedInputTokens = state.contextUsagePercentage > 0
-              ? Math.floor(state.contextUsagePercentage * 200000 / 100)
+              ? Math.floor(state.contextUsagePercentage * getKiroContextWindow(model) / 100)
               : estimateInputTokens(requestBody);
             state.usage = {
               ...(state.usage || {}),
