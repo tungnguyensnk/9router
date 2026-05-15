@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { refreshKiroToken } from "../services/tokenRefresh.js";
 import { proxyAwareFetch } from "../utils/proxyFetch.js";
 import { HTTP_STATUS, RETRY_CONFIG, DEFAULT_RETRY_CONFIG, resolveRetryEntry } from "../config/runtimeConfig.js";
-import { estimateInputTokens, estimateKiroOutputTokens } from "../utils/usageTracking.js";
+import { applyDerivedKiroCacheUsage, estimateInputTokens, estimateKiroOutputTokens } from "../utils/usageTracking.js";
 
 const KIRO_CONTEXT_WINDOWS = {
   auto: 200000,
@@ -361,6 +361,7 @@ export class KiroExecutor extends BaseExecutor {
             
             // Include usage in final chunk if available
             if (state.usage) {
+              state.usage = applyDerivedKiroCacheUsage(model, state.usage);
               finishChunk.usage = state.usage;
             }
             
@@ -401,6 +402,7 @@ export class KiroExecutor extends BaseExecutor {
             }]
           };
           if (state.usage) {
+            state.usage = applyDerivedKiroCacheUsage(model, state.usage);
             finishChunk.usage = state.usage;
           }
           controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(finishChunk)}\n\n`));

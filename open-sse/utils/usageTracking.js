@@ -18,6 +18,100 @@ export const COLORS = {
 // Buffer tokens to prevent context errors
 const BUFFER_TOKENS = 2000;
 
+const KIRO_SONNET_CREDITS_PER_MILLION = {
+  input: 4,
+  output: 62.5,
+  cached: 0.4
+};
+
+const KIRO_OPUS_CREDITS_PER_MILLION = {
+  input: 6.75,
+  output: 105,
+  cached: 0.675
+};
+
+const KIRO_MODEL_COST_MULTIPLIERS = {
+  auto: 1.0,
+  "claude-opus-4.7": 2.2,
+  "claude-opus-4.6": 2.2,
+  "claude-opus-4.5": 2.2,
+  "claude-sonnet-4.6": 1.3,
+  "claude-sonnet-4.5": 1.3,
+  "claude-sonnet-4.0": 1.3,
+  "claude-sonnet-4": 1.3,
+  "claude-haiku-4.5": 0.4,
+  "deepseek-3.2": 0.25,
+  "minimax-m2.5": 0.25,
+  "glm-5": 0.5,
+  "minimax-m2.1": 0.15,
+  "qwen3-coder-next": 0.05
+};
+
+function getKiroCreditProfile(model) {
+  const normalizedModel = String(model || "").trim().toLowerCase();
+  if (normalizedModel.startsWith("claude-opus-")) {
+    return KIRO_OPUS_CREDITS_PER_MILLION;
+  }
+
+  const multiplier = KIRO_MODEL_COST_MULTIPLIERS[normalizedModel];
+  if (!multiplier || multiplier <= 0) {
+    return KIRO_SONNET_CREDITS_PER_MILLION;
+  }
+
+  const scale = multiplier / 1.3;
+  return {
+    input: KIRO_SONNET_CREDITS_PER_MILLION.input * scale,
+    output: KIRO_SONNET_CREDITS_PER_MILLION.output * scale,
+    cached: KIRO_SONNET_CREDITS_PER_MILLION.cached * scale
+  };
+}
+
+export function applyDerivedKiroCacheUsage(model, usage) {
+  if (!usage || typeof usage !== "object") return usage;
+
+  const promptTokens = Number(usage.prompt_tokens || 0);
+  const completionTokens = Number(usage.completion_tokens || 0);
+  const creditsUsed = Number(usage.credits_used);
+
+  if (!Number.isFinite(promptTokens) || !Number.isFinite(completionTokens) || !Number.isFinite(creditsUsed)) {
+    return usage;
+  }
+
+  if (promptTokens <= 0 || creditsUsed <= 0) return usage;
+  if ((usage.cached_tokens || usage.cache_read_input_tokens || 0) > 0) return usage;
+
+  const profile = getKiroCreditProfile(model);
+  const predictedCredits =
+    (promptTokens * profile.input / 1000000) +
+    (completionTokens * profile.output / 1000000);
+
+  const savedCredits = predictedCredits - creditsUsed;
+  if (!Number.isFinite(savedCredits) || savedCredits <= 0) {
+    return usage;
+  }
+
+  const savingsPerMillionCachedTokens = profile.input - profile.cached;
+  if (!Number.isFinite(savingsPerMillionCachedTokens) || savingsPerMillionCachedTokens <= 0) {
+    return usage;
+  }
+
+  const cachedTokens = Math.floor(savedCredits * 1000000 / savingsPerMillionCachedTokens);
+  if (!Number.isFinite(cachedTokens) || cachedTokens <= 0) {
+    return usage;
+  }
+
+  const boundedCachedTokens = Math.min(promptTokens, cachedTokens);
+  return {
+    ...usage,
+    cached_tokens: boundedCachedTokens,
+    cache_read_input_tokens: boundedCachedTokens,
+    prompt_tokens_details: {
+      ...(usage.prompt_tokens_details || {}),
+      cached_tokens: boundedCachedTokens
+    }
+  };
+}
+
 // Get HH:MM:SS timestamp
 function getTimeString() {
   return new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });

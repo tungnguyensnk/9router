@@ -1,7 +1,7 @@
 import { FORMATS } from "../../translator/formats.js";
 import { needsTranslation } from "../../translator/index.js";
 import { ollamaBodyToOpenAI } from "../../translator/response/ollama-to-openai.js";
-import { addBufferToUsage, estimateUsage, filterUsageForFormat, hasValidUsage } from "../../utils/usageTracking.js";
+import { addBufferToUsage, applyDerivedKiroCacheUsage, estimateUsage, filterUsageForFormat, hasValidUsage } from "../../utils/usageTracking.js";
 import { createErrorResult } from "../../utils/error.js";
 import { HTTP_STATUS } from "../../config/runtimeConfig.js";
 import { parseSSEToOpenAIResponse } from "./sseToJsonHandler.js";
@@ -173,6 +173,10 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
     };
   }
 
+  if (provider === "kiro" && usage) {
+    usage = applyDerivedKiroCacheUsage(model, usage);
+  }
+
   appendLog({ tokens: usage, status: "200 OK" });
   saveUsageStats({ provider, model, tokens: usage, connectionId, apiKey, endpoint: clientRawRequest?.endpoint });
 
@@ -201,7 +205,10 @@ export async function handleNonStreamingResponse({ providerResponse, provider, m
   }
 
   if (translatedResponse?.usage) {
-    translatedResponse.usage = filterUsageForFormat(addBufferToUsage(translatedResponse.usage), sourceFormat);
+    const finalUsage = provider === "kiro"
+      ? applyDerivedKiroCacheUsage(model, translatedResponse.usage)
+      : translatedResponse.usage;
+    translatedResponse.usage = filterUsageForFormat(addBufferToUsage(finalUsage), sourceFormat);
   }
 
   // Strip reasoning_content — some clients (e.g. Firecrawl AI SDK) have JSON parsers that
