@@ -6,6 +6,18 @@ import { register } from "../index.js";
 import { FORMATS } from "../formats.js";
 import { v4 as uuidv4 } from "uuid";
 
+function parseKiroToolArguments(argumentsValue) {
+  if (typeof argumentsValue !== "string") {
+    return argumentsValue || {};
+  }
+
+  try {
+    return JSON.parse(argumentsValue);
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Convert OpenAI messages to Kiro format
  * Rules: system/tool/user -> user role, merge consecutive same roles
@@ -205,9 +217,7 @@ function convertMessages(messages, tools, model) {
               return {
                 toolUseId: tc.id || uuidv4(),
                 name: tc.function.name,
-                input: typeof tc.function.arguments === "string" 
-                  ? JSON.parse(tc.function.arguments) 
-                  : (tc.function.arguments || {})
+                input: parseKiroToolArguments(tc.function.arguments)
               };
             } else {
               return {
@@ -286,7 +296,7 @@ function convertMessages(messages, tools, model) {
 export function buildKiroPayload(model, body, stream, credentials) {
   const messages = body.messages || [];
   const tools = body.tools || [];
-  const maxTokens = 32000;
+  const maxTokens = body.max_completion_tokens || body.max_tokens || 32000;
   const temperature = body.temperature;
   const topP = body.top_p;
 

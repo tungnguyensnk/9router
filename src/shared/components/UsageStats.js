@@ -54,13 +54,15 @@ function RecentRequests({ requests = [] }) {
               <tr className="border-b border-border">
                 <th className="py-1.5 text-left font-semibold text-text-muted w-2"></th>
                 <th className="py-1.5 text-left font-semibold text-text-muted">Model</th>
-                <th className="py-1.5 text-right font-semibold text-text-muted whitespace-nowrap">In / Out / Cache</th>
+                <th className="py-1.5 text-right font-semibold text-text-muted whitespace-nowrap">In / Cache / Out</th>
                 <th className="py-1.5 text-right font-semibold text-text-muted">When</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/50">
               {requests.map((r, i) => {
                 const ok = !r.status || r.status === "ok" || r.status === "success";
+                const cachedTokens = r.cachedTokens || 0;
+                const uncachedInputTokens = Math.max((r.promptTokens || 0) - cachedTokens, 0);
                 return (
                   <tr key={i} className="hover:bg-bg-subtle transition-colors">
                     <td className="py-1.5">
@@ -68,10 +70,11 @@ function RecentRequests({ requests = [] }) {
                     </td>
                     <td className="py-1.5 font-mono truncate max-w-[120px]" title={r.model}>{r.model}</td>
                     <td className="py-1.5 text-right whitespace-nowrap">
-                      <span className="text-primary">{fmt(r.promptTokens)}↑</span>
+                      <span className="text-primary">{fmt(uncachedInputTokens)}↑</span>
+                      {" "}
+                      <span className="text-cyan-500">{fmt(cachedTokens)}⚡</span>
                       {" "}
                       <span className="text-success">{fmt(r.completionTokens)}↓</span>
-                      {" "}<span className="text-cyan-500">{fmt(r.cachedTokens)}⚡</span>
                     </td>
                     <td className="py-1.5 text-right text-text-muted whitespace-nowrap"><TimeAgo timestamp={r.timestamp} /></td>
                   </tr>
@@ -88,11 +91,14 @@ function RecentRequests({ requests = [] }) {
 function sortData(dataMap, pendingMap = {}, sortBy, sortOrder) {
   return Object.entries(dataMap || {})
     .map(([key, data]) => {
-      const totalTokens = (data.promptTokens || 0) + (data.completionTokens || 0);
+      const cachedTokens = data.cachedTokens ?? 0;
+      const uncachedInputTokens = Math.max((data.promptTokens || 0) - cachedTokens, 0);
+      const totalTokens = uncachedInputTokens + (data.completionTokens || 0) + cachedTokens;
       const totalCost = data.cost || 0;
-      const inputCost = totalTokens > 0 ? (data.promptTokens || 0) * (totalCost / totalTokens) : 0;
-      const outputCost = totalTokens > 0 ? (data.completionTokens || 0) * (totalCost / totalTokens) : 0;
-      return { ...data, key, totalTokens, totalCost, inputCost, outputCost, pending: pendingMap[key] || 0 };
+      const inputCost = data.inputCost ?? 0;
+      const cachedCost = data.cachedCost ?? 0;
+      const outputCost = data.outputCost ?? 0;
+      return { ...data, key, promptTokens: uncachedInputTokens, cachedTokens, totalTokens, totalCost, inputCost, cachedCost, outputCost, pending: pendingMap[key] || 0 };
     })
     .sort((a, b) => {
       let valA = a[sortBy];
@@ -123,7 +129,7 @@ function groupDataByKey(data, keyField) {
     if (!groups[gk]) {
       groups[gk] = {
         groupKey: gk,
-        summary: { requests: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, cost: 0, inputCost: 0, outputCost: 0, lastUsed: null, pending: 0 },
+        summary: { requests: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, totalTokens: 0, cost: 0, inputCost: 0, cachedCost: 0, outputCost: 0, lastUsed: null, pending: 0 },
         items: [],
       };
     }
@@ -131,9 +137,11 @@ function groupDataByKey(data, keyField) {
     s.requests += item.requests || 0;
     s.promptTokens += item.promptTokens || 0;
     s.completionTokens += item.completionTokens || 0;
+    s.cachedTokens += item.cachedTokens || 0;
     s.totalTokens += item.totalTokens || 0;
     s.cost += item.cost || 0;
     s.inputCost += item.inputCost || 0;
+    s.cachedCost += item.cachedCost || 0;
     s.outputCost += item.outputCost || 0;
     s.pending += item.pending || 0;
     if (item.lastUsed && (!s.lastUsed || new Date(item.lastUsed) > new Date(s.lastUsed))) {

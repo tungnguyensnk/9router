@@ -29,7 +29,7 @@ SortIcon.propTypes = {
 };
 
 /**
- * Render 3 token or cost cells based on viewMode
+ * Render 4 token or 4 cost cells based on viewMode
  */
 function ValueCells({ item, viewMode, isSummary = false }) {
   if (viewMode === "tokens") {
@@ -37,6 +37,9 @@ function ValueCells({ item, viewMode, isSummary = false }) {
       <>
         <td className="px-6 py-3 text-right text-text-muted">
           {isSummary && item.promptTokens === undefined ? "—" : fmt(item.promptTokens)}
+        </td>
+        <td className="px-6 py-3 text-right text-text-muted">
+          {isSummary && item.cachedTokens === undefined ? "—" : fmt(item.cachedTokens)}
         </td>
         <td className="px-6 py-3 text-right text-text-muted">
           {isSummary && item.completionTokens === undefined ? "—" : fmt(item.completionTokens)}
@@ -51,6 +54,9 @@ function ValueCells({ item, viewMode, isSummary = false }) {
     <>
       <td className="px-6 py-3 text-right text-text-muted">
         {isSummary && item.inputCost === undefined ? "—" : fmtCost(item.inputCost)}
+      </td>
+      <td className="px-6 py-3 text-right text-text-muted">
+        {isSummary && item.cachedCost === undefined ? "—" : fmtCost(item.cachedCost)}
       </td>
       <td className="px-6 py-3 text-right text-text-muted">
         {isSummary && item.outputCost === undefined ? "—" : fmtCost(item.outputCost)}
@@ -133,13 +139,15 @@ export default function UsageTable({
     if (viewMode === "tokens") {
       return [
         { field: "promptTokens", label: "Input Tokens" },
+        { field: "cachedTokens", label: "Cache Tokens" },
         { field: "completionTokens", label: "Output Tokens" },
         { field: "totalTokens", label: "Total Tokens" },
       ];
     }
     return [
-      { field: "promptTokens", label: "Input Cost" },
-      { field: "completionTokens", label: "Output Cost" },
+      { field: "inputCost", label: "Input Cost" },
+      { field: "cachedCost", label: "Cache Cost" },
+      { field: "outputCost", label: "Output Cost" },
       { field: "cost", label: "Total Cost" },
     ];
   }, [viewMode]);
