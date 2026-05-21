@@ -236,7 +236,14 @@ export function createSSEStream(options = {}) {
             // Inject estimated usage if finish chunk has no valid usage
             const isFinishChunk = item.type === "message_delta" || item.choices?.[0]?.finish_reason;
             if (state.finishReason && isFinishChunk && !hasValidUsage(item.usage) && totalContentLength > 0) {
-              const estimated = estimateUsage(body, totalContentLength, sourceFormat);
+              const estimated = {
+                ...(item.usage || {}),
+                ...(state.usage || {}),
+                ...estimateUsage(body, totalContentLength, sourceFormat, {
+                  provider,
+                  outputText: accumulatedContent + accumulatedThinking
+                })
+              };
               item.usage = filterUsageForFormat(estimated, sourceFormat); // Filter + already has buffer
               state.usage = estimated;
             } else if (state.finishReason && isFinishChunk && state.usage) {
@@ -270,7 +277,13 @@ export function createSSEStream(options = {}) {
           }
 
           if (!hasValidUsage(usage) && totalContentLength > 0) {
-            usage = estimateUsage(body, totalContentLength, FORMATS.OPENAI);
+            usage = {
+              ...(usage || {}),
+              ...estimateUsage(body, totalContentLength, FORMATS.OPENAI, {
+                provider,
+                outputText: accumulatedContent + accumulatedThinking
+              })
+            };
           }
 
           if (hasValidUsage(usage)) {
@@ -340,7 +353,13 @@ export function createSSEStream(options = {}) {
         controller.enqueue(sharedEncoder.encode(doneOutput));
 
         if (!hasValidUsage(state?.usage) && totalContentLength > 0) {
-          state.usage = estimateUsage(body, totalContentLength, sourceFormat);
+          state.usage = {
+            ...(state.usage || {}),
+            ...estimateUsage(body, totalContentLength, sourceFormat, {
+              provider,
+              outputText: accumulatedContent + accumulatedThinking
+            })
+          };
         }
 
         if (hasValidUsage(state?.usage)) {

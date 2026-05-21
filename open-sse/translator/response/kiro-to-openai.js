@@ -57,6 +57,8 @@ export function convertKiroToOpenAI(chunk, state) {
     state.responseId = `chatcmpl-${Date.now()}`;
     state.created = Math.floor(Date.now() / 1000);
     state.chunkIndex = 0;
+    state.toolCallIndex = 0;
+    state.seenToolIds = new Map();
   }
 
   const eventType = data._eventType || data.event || "";
@@ -119,9 +121,32 @@ export function convertKiroToOpenAI(chunk, state) {
   // Handle tool use events
   if (eventType === "toolUseEvent" || data.toolUseEvent) {
     const toolUse = data.toolUseEvent || data;
-    const toolCallId = toolUse.toolUseId || `call_${Date.now()}`;
-    const toolName = toolUse.name || "";
-    const toolInput = toolUse.input || {};
+    const toolUses = Array.isArray(toolUse) ? toolUse : [toolUse];
+    const toolChunks = [];
+
+    for (const singleToolUse of toolUses) {
+      const toolCallId = singleToolUse.toolUseId || `call_${Date.now()}`;
+      const toolName = singleToolUse.name || "";
+      const toolInput = singleToolUse.input || {};
+      let toolIndex;
+
+      if (state.seenToolIds.has(toolCallId)) {
+        toolIndex = state.seenToolIds.get(toolCallId);
+      } else {
+        toolIndex = state.toolCallIndex++;
+        state.seenToolIds.set(toolCallId, toolIndex);
+      }
+
+      toolChunks.push({
+        index: toolIndex,
+        id: toolCallId,
+        type: "function",
+        function: {
+          name: toolName,
+          arguments: JSON.stringify(toolInput)
+        }
+      });
+    }
 
     const openaiChunk = {
       id: state.responseId,
@@ -132,15 +157,7 @@ export function convertKiroToOpenAI(chunk, state) {
         index: 0,
         delta: {
           ...(state.chunkIndex === 0 ? { role: "assistant" } : {}),
-          tool_calls: [{
-            index: 0,
-            id: toolCallId,
-            type: "function",
-            function: {
-              name: toolName,
-              arguments: JSON.stringify(toolInput)
-            }
-          }]
+          tool_calls: toolChunks
         },
         finish_reason: null
       }]

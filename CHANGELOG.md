@@ -424,7 +424,6 @@
 
 ## Features
 - Add Hermes CLI tool with settings management and integration
-- Add in-app version update mechanism (appUpdater + /api/version/update)
 
 ## Improvements
 - Strengthen CLI token validation for enhanced security

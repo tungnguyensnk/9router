@@ -22,6 +22,7 @@ product
 # production
 /build
 .idea/
+.trae/
 
 # misc
 .DS_Store

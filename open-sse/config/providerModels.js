@@ -132,24 +132,19 @@ export const PROVIDER_MODELS = {
     { id: "text-embedding-3-large", name: "Text Embedding 3 Large (GitHub)", type: "embedding" },
   ],
   kr: [  // Kiro AI
-    // --- Base Claude variants ---
-    // { id: "claude-opus-4.5", name: "Claude Opus 4.5" },
+    { id: "auto", name: "Auto" },
+    { id: "claude-opus-4.7", name: "Claude Opus 4.7" },
+    { id: "claude-opus-4.6", name: "Claude Opus 4.6" },
+    { id: "claude-opus-4.5", name: "Claude Opus 4.5" },
+    { id: "claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
     { id: "claude-sonnet-4.5", name: "Claude Sonnet 4.5" },
+    { id: "claude-sonnet-4.0", name: "Claude Sonnet 4.0" },
     { id: "claude-haiku-4.5", name: "Claude Haiku 4.5" },
     { id: "deepseek-3.2", name: "DeepSeek 3.2", strip: ["image", "audio"] },
     { id: "qwen3-coder-next", name: "Qwen3 Coder Next", strip: ["image", "audio"] },
     { id: "glm-5", name: "GLM 5" },
+    { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
     { id: "MiniMax-M2.5", name: "MiniMax M2.5" },
-    // --- Thinking variants (alias to base; thinking is enabled at request time
-    //     via <thinking_mode>enabled</thinking_mode> system-prompt injection) ---
-    { id: "claude-sonnet-4.5-thinking", name: "Claude Sonnet 4.5 (Thinking)" },
-    { id: "claude-haiku-4.5-thinking", name: "Claude Haiku 4.5 (Thinking)" },
-    // --- Agentic variants (synthetic; same upstream model + chunked-write
-    //     system prompt to dodge Kiro's 2-3 min server timeout on big writes) ---
-    { id: "claude-sonnet-4.5-agentic", name: "Claude Sonnet 4.5 (Agentic)" },
-    { id: "claude-haiku-4.5-agentic", name: "Claude Haiku 4.5 (Agentic)" },
-    { id: "claude-sonnet-4.5-thinking-agentic", name: "Claude Sonnet 4.5 (Thinking + Agentic)" },
-    { id: "claude-haiku-4.5-thinking-agentic", name: "Claude Haiku 4.5 (Thinking + Agentic)" },
   ],
   cu: [  // Cursor IDE
     { id: "default", name: "Auto (Server Picks)" },
@@ -428,8 +423,6 @@ export const PROVIDER_MODELS = {
   ],
   deepseek: [
     { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" },
-    { id: "deepseek-v4-pro-max", name: "DeepSeek V4 Pro Max", upstreamModelId: "deepseek-v4-pro" },
-    { id: "deepseek-v4-pro-none", name: "DeepSeek V4 Pro No Thinking", upstreamModelId: "deepseek-v4-pro" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" },
     { id: "deepseek-chat", name: "DeepSeek V3.2 Chat" },
     { id: "deepseek-reasoner", name: "DeepSeek V3.2 Reasoner" },
@@ -462,7 +455,6 @@ export const PROVIDER_MODELS = {
     { id: "grok-4-fast-reasoning", name: "Grok 4 Fast Reasoning" },
     { id: "grok-code-fast-1", name: "Grok Code Fast" },
     { id: "grok-3", name: "Grok 3" },
-    { id: "grok-2-image-1212", name: "Grok 2 Image", type: "image", params: ["n", "response_format"] },
   ],
   mistral: [
     { id: "mistral-large-latest", name: "Mistral Large 3" },
@@ -538,16 +530,6 @@ export const PROVIDER_MODELS = {
     { id: "mimo-v2.5", name: "MiMo V2.5" },
     { id: "mimo-v2-omni", name: "MiMo V2 Omni" },
     { id: "mimo-v2-flash", name: "MiMo V2 Flash" },
-  ],
-  "xiaomi-tokenplan": [
-    { id: "mimo-v2.5-pro", name: "MiMo V2.5 Pro" },
-    { id: "mimo-v2.5", name: "MiMo V2.5" },
-    { id: "mimo-v2-pro", name: "MiMo V2 Pro" },
-    { id: "mimo-v2-omni", name: "MiMo V2 Omni" },
-    { id: "mimo-v2-tts", name: "MiMo V2 TTS" },
-    { id: "mimo-v2.5-tts", name: "MiMo V2.5 TTS" },
-    { id: "mimo-v2.5-tts-voiceclone", name: "MiMo V2.5 TTS Voice Clone" },
-    { id: "mimo-v2.5-tts-voicedesign", name: "MiMo V2.5 TTS Voice Design" },
   ],
   hyperbolic: [
     { id: "Qwen/QwQ-32B", name: "QwQ 32B" },

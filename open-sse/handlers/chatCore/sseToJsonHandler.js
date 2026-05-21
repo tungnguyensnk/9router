@@ -2,6 +2,7 @@ import { convertResponsesStreamToJson } from "../../transformer/streamToJsonConv
 import { createErrorResult } from "../../utils/error.js";
 import { HTTP_STATUS } from "../../config/runtimeConfig.js";
 import { FORMATS } from "../../translator/formats.js";
+import { applyDerivedKiroCacheUsage, estimateUsage, hasValidUsage } from "../../utils/usageTracking.js";
 import { buildRequestDetail, extractRequestConfig, saveUsageStats } from "./requestDetail.js";
 import { saveRequestDetail, appendRequestLog } from "@/lib/usageDb.js";
 
@@ -193,7 +194,22 @@ export async function handleForcedSSEToJson({ providerResponse, sourceFormat, pr
 
     if (onRequestSuccess) await onRequestSuccess();
 
-    const usage = parsed.usage || {};
+    let usage = parsed.usage || {};
+    if (provider === "kiro" && !hasValidUsage(usage)) {
+      const outputText = parsed.choices?.[0]?.message?.content || parsed.choices?.[0]?.message?.reasoning_content || "";
+      usage = {
+        ...(usage || {}),
+        ...estimateUsage(finalBody || translatedBody || body, outputText.length, FORMATS.OPENAI, {
+          provider,
+          outputText
+        })
+      };
+      parsed.usage = usage;
+    }
+    if (provider === "kiro" && usage) {
+      usage = applyDerivedKiroCacheUsage(model, usage);
+      parsed.usage = usage;
+    }
     appendLog({ tokens: usage, status: "200 OK" });
     saveUsageStats({ provider, model, tokens: usage, connectionId, apiKey, endpoint: clientRawRequest?.endpoint });
 

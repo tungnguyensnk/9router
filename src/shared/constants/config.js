@@ -13,24 +13,7 @@ export const GITHUB_CONFIG = {
   donateUrl: "https://9router.com/api/donate",
 };
 
-// Updater configuration
-export const UPDATER_CONFIG = {
-  npmPackageName: "9router",
-  installCmd: "npm i -g 9router",
-  installCmdLatest: "npm i -g 9router@latest --prefer-online",
-  shutdownCountdownSec: 3,
-  exitDelayMs: 500,
-  statusPort: 20129,
-  statusPollIntervalMs: 1000,
-  statusLogTailLines: 8,
-  installRetries: 3,
-  installRetryDelayMs: 5000,
-  lingerAfterDoneMs: 30000,
-  waitForExitMinMs: 5000,
-  waitForExitMaxMs: 20000,
-  waitForExitCheckMs: 500,
-  appPort: 20128,
-};
+export const APP_PORT = 20128;
 
 // Theme configuration
 export const THEME_CONFIG = {
