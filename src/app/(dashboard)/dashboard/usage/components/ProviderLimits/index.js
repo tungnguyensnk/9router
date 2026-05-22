@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import ProviderIcon from "@/shared/components/ProviderIcon";
 import QuotaTable from "./QuotaTable";
 import Toggle from "@/shared/components/Toggle";
-import { parseQuotaData, calculatePercentage } from "./utils";
+import { parseQuotaData, calculatePercentage, getRemainingPercentage } from "./utils";
 import Card from "@/shared/components/Card";
 import { EditConnectionModal } from "@/shared/components";
 import { USAGE_SUPPORTED_PROVIDERS, USAGE_APIKEY_PROVIDERS } from "@/shared/constants/providers";
@@ -54,7 +54,7 @@ export default function ProviderLimits() {
   // Fetch all provider connections
   const fetchConnections = useCallback(async () => {
     try {
-      const response = await fetch("/api/providers/client");
+      const response = await fetch("/api/providers/client?pageSize=500&sort=provider");
       if (!response.ok) throw new Error("Failed to fetch connections");
 
       const data = await response.json();
@@ -67,6 +67,11 @@ export default function ProviderLimits() {
       return [];
     }
   }, []);
+
+  const getQuotaConnections = useCallback(
+    (conns) => conns.filter((conn) => isUsageEligible(conn) && (showDisabled || (conn.isActive ?? true))),
+    [showDisabled],
+  );
 
   // Fetch quota for a specific connection
   const fetchQuota = useCallback(async (connectionId, provider) => {
@@ -250,10 +255,7 @@ export default function ProviderLimits() {
     try {
       const conns = await fetchConnections();
 
-      // Filter eligible connections (OAuth + whitelisted apikey)
-      const eligibleConnections = conns.filter(
-        (conn) => isUsageEligible(conn) && (conn.isActive ?? true),
-      );
+      const eligibleConnections = getQuotaConnections(conns);
 
       await Promise.all(
         eligibleConnections.map((conn) => fetchQuota(conn.id, conn.provider)),
@@ -265,7 +267,7 @@ export default function ProviderLimits() {
     } finally {
       setRefreshingAll(false);
     }
-  }, [refreshingAll, fetchConnections, fetchQuota]);
+  }, [refreshingAll, fetchConnections, fetchQuota, getQuotaConnections]);
 
   // Initial load: fetch connections first so cards render immediately, then fetch quotas
   useEffect(() => {
@@ -274,9 +276,7 @@ export default function ProviderLimits() {
       const conns = await fetchConnections();
       setConnectionsLoading(false);
 
-      const eligibleConnections = conns.filter(
-        (conn) => isUsageEligible(conn) && (conn.isActive ?? true),
-      );
+      const eligibleConnections = getQuotaConnections(conns);
 
       // Mark all as loading before fetching
       const loadingState = {};
@@ -293,6 +293,15 @@ export default function ProviderLimits() {
 
     initializeData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!showDisabled) return;
+    const missingConnections = connections.filter(
+      (conn) => isUsageEligible(conn) && !(conn.isActive ?? true) && !quotaData[conn.id] && !loading[conn.id],
+    );
+    if (!missingConnections.length) return;
+    missingConnections.forEach((conn) => fetchQuota(conn.id, conn.provider));
+  }, [showDisabled, connections, quotaData, loading, fetchQuota]);
 
   // Persist auto-refresh preference
   useEffect(() => {
@@ -396,8 +405,9 @@ export default function ProviderLimits() {
     const quotas = quotaData[conn.id]?.quotas;
     if (!quotas?.length) return false;
     return quotas.some((q) => {
-      if (!q.total || q.total <= 0) return false;
-      return calculatePercentage(q.used, q.total) <= DEPLETED_QUOTA_THRESHOLD;
+      const remaining = getRemainingPercentage(q);
+      if (!q.total || q.total <= 0) return remaining <= DEPLETED_QUOTA_THRESHOLD;
+      return remaining <= DEPLETED_QUOTA_THRESHOLD;
     });
   };
 
@@ -436,7 +446,7 @@ export default function ProviderLimits() {
 
   const handleEnableAvailable = () => {
     const ids = sortedConnections
-      .filter((c) => !(c.isActive ?? true) && !isConnectionDepleted(c))
+      .filter((c) => !(c.isActive ?? true) && quotaData[c.id]?.quotas?.length && !isConnectionDepleted(c))
       .map((c) => c.id);
     bulkSetActive(ids, true);
   };
